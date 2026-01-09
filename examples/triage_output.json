@@ -1,0 +1,35 @@
+{
+  "alert": {
+    "name": "HighErrorRate",
+    "severity": "critical",
+    "service": "trade-api",
+    "namespace": "trading",
+    "summary": "5xx spike on trade-api",
+    "description": "HTTP 500 rate > 5% for 10m. Possible regression after deploy."
+  },
+  "hypotheses": [
+    "5xx spike: bad deploy, config regression, or dependency returning errors."
+  ],
+  "first_steps": [
+    "Check scope: is it only trade-api in trading, or are dependent services impacted too? (dashboards/service map)",
+    "Check recent changes: deploy/config/feature flags within the last 30–60 minutes",
+    "Kubernetes quick check: kubectl -n trading get pods,events && kubectl -n trading describe pod <pod>",
+    "Logs: filter by correlation/request-id (if available) and scan for ERROR/timeout spikes",
+    "Performance: latency p95/p99, error rate, saturation signals (CPU/Mem/DB pool/queue lag)"
+  ],
+  "runbooks": [
+    {
+      "title": "K8s High Error Rate / 5xx Spike",
+      "path": "docs/runbooks/k8s-high-error-rate.md",
+      "score": 3.162,
+      "matched_terms": [
+        "5xx",
+        "spike",
+        "rate",
+        "5xx",
+        "spike",
+        "rate"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "labels": {
+    "alertname": "HighErrorRate",
+    "severity": "critical",
+    "service": "trade-api",
+    "namespace": "trading"
+  },
+  "annotations": {
+    "summary": "5xx spike on trade-api",
+    "description": "HTTP 500 rate > 5% for 10m. Possible regression after deploy."
+  }
+}
