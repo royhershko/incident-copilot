@@ -4,7 +4,7 @@ import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any
 
 import typer
 from pydantic import BaseModel, Field
@@ -30,12 +30,12 @@ class Alert(BaseModel):
     description: str | None = None
     service: str | None = None
     namespace: str | None = None
-    labels: Dict[str, Any] = Field(default_factory=dict)
-    annotations: Dict[str, Any] = Field(default_factory=dict)
-    raw: Dict[str, Any] = Field(default_factory=dict)
+    labels: dict[str, Any] = Field(default_factory=dict)
+    annotations: dict[str, Any] = Field(default_factory=dict)
+    raw: dict[str, Any] = Field(default_factory=dict)
 
     @staticmethod
-    def from_json(data: Dict[str, Any]) -> "Alert":
+    def from_json(data: dict[str, Any]) -> Alert:
         labels = data.get("labels") or {}
         ann = data.get("annotations") or {}
 
@@ -76,20 +76,20 @@ class RunbookHit:
     path: Path
     score: float
     title: str
-    matched_terms: List[str]
+    matched_terms: list[str]
 
 
-def tokenize(text: str) -> List[str]:
+def tokenize(text: str) -> list[str]:
     text = (text or "").lower()
     text = re.sub(r"[^a-z0-9_\-:/\. ]+", " ", text)
     return [t for t in text.split() if len(t) > 2]
 
 
-def load_runbooks(runbooks_dir: Path) -> List[Tuple[Path, str]]:
+def load_runbooks(runbooks_dir: Path) -> list[tuple[Path, str]]:
     if not runbooks_dir.exists():
         return []
     files = sorted(runbooks_dir.glob("*.md"))
-    runbooks: List[Tuple[Path, str]] = []
+    runbooks: list[tuple[Path, str]] = []
     for f in files:
         try:
             runbooks.append((f, f.read_text(encoding="utf-8")))
@@ -98,7 +98,7 @@ def load_runbooks(runbooks_dir: Path) -> List[Tuple[Path, str]]:
     return runbooks
 
 
-def score_runbook(content: str, terms: List[str]) -> Tuple[float, List[str], str]:
+def score_runbook(content: str, terms: list[str]) -> tuple[float, list[str], str]:
     lower = content.lower()
 
     title = "Untitled"
@@ -119,7 +119,7 @@ def score_runbook(content: str, terms: List[str]) -> Tuple[float, List[str], str
     return score, matched[:12], title
 
 
-def pick_top_runbooks(alert: Alert, runbooks_dir: Path, top_k: int = 3) -> List[RunbookHit]:
+def pick_top_runbooks(alert: Alert, runbooks_dir: Path, top_k: int = 3) -> list[RunbookHit]:
     parts = [
         alert.alertname or "",
         alert.summary or "",
@@ -132,7 +132,7 @@ def pick_top_runbooks(alert: Alert, runbooks_dir: Path, top_k: int = 3) -> List[
     terms = tokenize(" ".join(parts))
 
     runbooks = load_runbooks(runbooks_dir)
-    hits: List[RunbookHit] = []
+    hits: list[RunbookHit] = []
     for path, content in runbooks:
         score, matched, title = score_runbook(content, terms)
         if score > 0:
@@ -142,7 +142,7 @@ def pick_top_runbooks(alert: Alert, runbooks_dir: Path, top_k: int = 3) -> List[
     return hits[:top_k]
 
 
-def build_triage(alert: Alert, hits: List[RunbookHit]) -> Dict[str, Any]:
+def build_triage(alert: Alert, hits: list[RunbookHit]) -> dict[str, Any]:
     service = alert.service or alert.labels.get("service") or "unknown-service"
     ns = alert.namespace or alert.labels.get("namespace") or "default"
     name = alert.alertname or "unknown-alert"
@@ -156,16 +156,22 @@ def build_triage(alert: Alert, hits: List[RunbookHit]) -> Dict[str, Any]:
     ]
 
     text = " ".join([alert.summary or "", alert.description or "", name]).lower()
-    hypotheses: List[str] = []
+    hypotheses: list[str] = []
 
     if any(k in text for k in ["timeout", "timed out", "deadline", "context deadline"]):
-        hypotheses.append("Timeouts: dependency degradation (DB/Redis/3rd party) or saturation (threads/CPU/conn pool).")
+        hypotheses.append(
+            "Timeouts: dependency degradation (DB/Redis/3rd party) or saturation (threads/CPU/conn pool)."
+        )
     if any(k in text for k in ["5xx", "error rate", "http 500", "internal server error"]):
-        hypotheses.append("5xx spike: bad deploy, config regression, or dependency returning errors.")
+        hypotheses.append(
+            "5xx spike: bad deploy, config regression, or dependency returning errors."
+        )
     if any(k in text for k in ["oom", "out of memory", "crashloop", "crash loop"]):
         hypotheses.append("Crash/OOM: memory leak, low limits, or unexpected traffic burst.")
     if not hypotheses:
-        hypotheses.append("Generic: correlate with recent changes, load increase, dependency health, and networking/DNS.")
+        hypotheses.append(
+            "Generic: correlate with recent changes, load increase, dependency health, and networking/DNS."
+        )
 
     return {
         "alert": {
@@ -179,13 +185,18 @@ def build_triage(alert: Alert, hits: List[RunbookHit]) -> Dict[str, Any]:
         "hypotheses": hypotheses[:3],
         "first_steps": steps,
         "runbooks": [
-            {"title": h.title, "path": str(h.path), "score": round(h.score, 3), "matched_terms": h.matched_terms}
+            {
+                "title": h.title,
+                "path": str(h.path),
+                "score": round(h.score, 3),
+                "matched_terms": h.matched_terms,
+            }
             for h in hits
         ],
     }
 
 
-def render(triage: Dict[str, Any]) -> None:
+def render(triage: dict[str, Any]) -> None:
     a = triage["alert"]
     header = (
         f"[bold]{a['name']}[/bold]  |  severity={a.get('severity')}  |  "
